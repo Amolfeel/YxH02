@@ -31,7 +31,6 @@ from .powers import powerxup_store, refresh_power, buy_power
 from .duel_callback import handle_arena_actions, handle_duel_actions
 # Then register other handlers
 from .summon_handler import handle_summon_actions
-from . extras import uncollected_characters, create_telegraph_page_for_uncollected
 from ..Database.characters import get_all as get_all_anime_characters
 
 # MODULE FUNCTIONS IMPORTS
@@ -99,30 +98,7 @@ async def cbq(_, q: CallbackQuery):
 
         await q.message.edit_text("💔 Proposal rejected.")
 
-  elif q.data == "uncollected":
-    u = await get_user(q.from_user.id)  # Fetch the user from the database
-    coll_dict: dict = u.collection
-    all_characters = await get_all_anime_characters()
-
-    if not all_characters:  
-        await q.answer("No characters are available.", show_alert=True)
-        return
-
-    collected_ids = set(str(k) for k in coll_dict.keys())
-
-    uncollected = [
-    char for char in all_characters.values()
-    if str(char.id) not in collected_ids
-    ]
-      
-    if not uncollected:  
-        await q.answer("You have collected all characters!", show_alert=True)
-        return
-
-    telegraph_url = await create_telegraph_page_for_uncollected(q.from_user, uncollected)
-    await q.message.reply(f"Here are your uncollected characters: {telegraph_url}")
-    await q.answer()  # Acknowledge the button press
-
+  
   if q.data.startswith('duel_'):
         return await handle_duel_actions(_, q)
   elif q.data.startswith('arena_'):
