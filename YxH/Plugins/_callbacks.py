@@ -108,8 +108,13 @@ async def cbq(_, q: CallbackQuery):
         await q.answer("No characters are available.", show_alert=True)
         return
 
-    uncollected = [char for char in all_characters.values() if char.id not in coll_dict]
+    collected_ids = set(str(k) for k in coll_dict.keys())
 
+    uncollected = [
+    char for char in all_characters.values()
+    if str(char.id) not in collected_ids
+    ]
+      
     if not uncollected:  
         await q.answer("You have collected all characters!", show_alert=True)
         return
