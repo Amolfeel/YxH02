@@ -29,7 +29,7 @@ def acollection_template(lis: list[dict], no: list[int]) -> str:
     return txt
 
 def copx_template(info: dict) -> str:
-   txt = '🌈 𝑵𝒆𝒘 𝑪𝒉𝒂𝒓𝒂𝒄𝒕𝒆𝒓 𝑨𝒍𝒆𝒓𝒕: 𝑪𝑨𝑻𝑪𝑯 𝑰𝑻! 🌈''\n'
+   txt = '🌈 𝑵𝒆𝒘 𝑪𝒉𝒂𝒓𝒂𝒄𝒕𝒆𝒓 𝑨𝒍𝒆𝒓𝒕: 𝑪𝑨𝑻𝑪𝑯 𝑰𝑻! 🌈'
    txt += '\n\n'
    txt += f'🌻𝐀𝐧𝐢𝐦𝐞: {info["anime"]}'
    txt += '\n'
