@@ -1,91 +1,58 @@
 import asyncio
 import os
 from pyrogram import Client, filters
+from pyrogram.types import InlineKeyboardMarkup as ikm, InlineKeyboardButton as ikb
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
-from telegraph import Telegraph
-
 from . import YxH, get_anime_character
+from telegraph import Telegraph
 from YxH.Database.characters import get_all as get_all_anime_characters
 
 
 # ======================================================
-#                  TELEGRAPH SYSTEM
+#                 TELEGRAPH SETUP
 # ======================================================
 
-telegraph_clients = {}  # user.id -> Telegraph instance
+telegraph = Telegraph()
+telegraph_accounts = {}  # user.id -> created or not
 
 
-async def get_telegraph_client(user):
-    if user.id in telegraph_clients:
-        return telegraph_clients[user.id]
+async def get_telegraph_account(user):
+    if user.id in telegraph_accounts:
+        return True
 
-    tg = Telegraph()
-    await asyncio.to_thread(tg.create_account, short_name=user.first_name)
-
-    telegraph_clients[user.id] = tg
-    return tg
+    await asyncio.to_thread(
+        telegraph.create_account,
+        short_name=user.first_name
+    )
+    telegraph_accounts[user.id] = True
+    return True
 
 
 # ======================================================
-#          CREATE TELEGRAPH PAGE FOR DUPLICATES
+#        CREATE TELEGRAPH PAGE FOR DUPLICATES
 # ======================================================
 
-async def create_telegraph_for_duplicates(user, duplicates: dict):
-    tg = await get_telegraph_client(user)
+async def create_telegraph_for_duplicates(user, duplicates):
+    await get_telegraph_account(user)
 
-    content = []
+    html = f"<h3>{user.first_name}'s Duplicate Characters</h3><ul>"
 
-    # Sort by highest duplicates first
-    for dup_id, count in sorted(duplicates.items(), key=lambda x: x[1], reverse=True):
-        char = await get_anime_character(str(dup_id))
+    for dup_id, count in duplicates.items():
+        char = await get_anime_character(dup_id)
         if not char:
             continue
+        html += f"<li>{char.name} (ID: {char.id}) × {count}</li>"
 
-        text = f"• {char.name} (ID: {char.id}) × {count}"
-        content.append({"tag": "p", "children": [text]})
-
-    if not content:
-        content.append({"tag": "p", "children": ["No duplicate characters found."]})
+    html += "</ul>"
 
     page = await asyncio.to_thread(
-        tg.create_page,
+        telegraph.create_page,
         title=f"{user.first_name}'s Extra Characters",
-        content=content
+        html_content=html
     )
 
-    return "https://telegra.ph/" + page["path"]
-
-
-# ======================================================
-#            PDF FOR UNCOLLECTED CHARACTERS
-# ======================================================
-
-async def create_pdf_for_uncollected(user, uncollected, file_path):
-    c = canvas.Canvas(file_path, pagesize=letter)
-    width, height = letter
-    y = height - 50
-
-    c.setFont("Helvetica-Bold", 16)
-    c.drawString(50, y, f"{user.first_name}'s Uncollected Characters")
-    y -= 30
-
-    c.setFont("Helvetica", 12)
-
-    for char in uncollected:
-        if not char:
-            continue
-
-        line = f"{char.name} (ID: {char.id})"
-
-        if y < 50:
-            c.showPage()
-            y = height - 50
-
-        c.drawString(50, y, line)
-        y -= 20
-
-    c.save()
+    return page["url"]
 
 
 # ======================================================
@@ -101,17 +68,11 @@ async def find_duplicates(_, m, u):
     if not coll_dict:
         return await m.reply('Your collection is empty.')
 
-    duplicates = {}
-
-    # 🔥 SAME LOGIC AS /collection COMMAND
-    for k, v in coll_dict.items():
-        try:
-            count = int(v)  # handle "3" and 3 both
-        except:
-            continue
-
-        if count > 1:
-            duplicates[str(k)] = count
+    # ✅ EXACT SAME LOGIC AS YOUR OLD WORKING SCRIPT
+    duplicates = {
+        k: v for k, v in coll_dict.items()
+        if isinstance(v, int) and v > 1
+    }
 
     if not duplicates:
         return await m.reply('No extras 🆔 found in your collection.')
@@ -121,13 +82,36 @@ async def find_duplicates(_, m, u):
     url = await create_telegraph_for_duplicates(user, duplicates)
 
     await msg.edit(
-        f"📄 **Here is your Extra Characters list:**\n\n"
+        f"📄 **Here is your Duplicate Characters list:**\n\n"
         f"🔗 {url}"
     )
 
 
 # ======================================================
-#               /uncollected COMMAND
+#        TELEGRAPH PAGE FOR UNCOLLECTED (UNCHANGED)
+# ======================================================
+
+async def create_telegraph_page_for_uncollected(user, uncollected):
+    await get_telegraph_account(user)
+
+    content = f"<strong>{user.first_name}'s Uncollected Characters:</strong><ul>"
+    for char in uncollected:
+        if not char:
+            continue
+        content += f"<li>{char.name} (ID: {char.id})</li>"
+    content += "</ul>"
+
+    page = await asyncio.to_thread(
+        telegraph.create_page,
+        title=f"{user.first_name}'s Uncollected Characters",
+        html_content=content
+    )
+
+    return page["url"]
+
+
+# ======================================================
+#                 /uncollected COMMAND
 # ======================================================
 
 @Client.on_message(filters.command('uncollected'))
@@ -150,14 +134,9 @@ async def uncollected_characters(_, m, u):
     if not uncollected:
         return await m.reply("🎉 You have collected all characters!")
 
-    file_path = f"/tmp/{user.id}_uncollected.pdf"
-    await create_pdf_for_uncollected(user, uncollected, file_path)
+    url = await create_telegraph_page_for_uncollected(user, uncollected)
 
-    try:
-        await m.reply_document(
-            file_path,
-            caption=f"📄 You are missing {len(uncollected)} characters."
-        )
-    finally:
-        if os.path.exists(file_path):
-            os.remove(file_path)
+    await m.reply(
+        f"📄 **Your Uncollected Characters List:**\n\n"
+        f"🔗 {url}"
+    )
