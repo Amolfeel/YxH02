@@ -1,10 +1,8 @@
 import asyncio
 import os
 from pyrogram import Client, filters
-from pyrogram.types import InlineKeyboardMarkup as ikm, InlineKeyboardButton as ikb
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
-
 from telegraph import Telegraph
 
 from . import YxH, get_anime_character
@@ -38,7 +36,8 @@ async def create_telegraph_for_duplicates(user, duplicates: dict):
 
     content = []
 
-    for dup_id, count in duplicates.items():
+    # Sort by highest duplicates first
+    for dup_id, count in sorted(duplicates.items(), key=lambda x: x[1], reverse=True):
         char = await get_anime_character(str(dup_id))
         if not char:
             continue
@@ -59,39 +58,7 @@ async def create_telegraph_for_duplicates(user, duplicates: dict):
 
 
 # ======================================================
-#                 /extras COMMAND (TELEGRAPH)
-# ======================================================
-
-@Client.on_message(filters.command('extras'))
-@YxH()
-async def find_duplicates(_, m, u):
-    user = m.from_user
-    coll_dict: dict = u.collection
-
-    if not coll_dict:
-        return await m.reply('Your collection is empty.')
-
-    # ✅ EXACT SAME LOGIC AS YOUR WORKING SCRIPT
-    duplicates = {
-        k: v for k, v in coll_dict.items()
-        if isinstance(v, int) and v > 1
-    }
-
-    if not duplicates:
-        return await m.reply('No extras 🆔 found in your collection.')
-
-    msg = await m.reply("📄 Creating your extras list...")
-
-    url = await create_telegraph_for_duplicates(user, duplicates)
-
-    await msg.edit(
-        f"📄 **Here is your Extra Characters list:**\n\n"
-        f"🔗 {url}"
-    )
-
-
-# ======================================================
-#        PDF CREATION FOR UNCOLLECTED (UNCHANGED)
+#            PDF FOR UNCOLLECTED CHARACTERS
 # ======================================================
 
 async def create_pdf_for_uncollected(user, uncollected, file_path):
@@ -122,7 +89,45 @@ async def create_pdf_for_uncollected(user, uncollected, file_path):
 
 
 # ======================================================
-#                 /uncollected COMMAND
+#                 /extras COMMAND
+# ======================================================
+
+@Client.on_message(filters.command('extras'))
+@YxH()
+async def find_duplicates(_, m, u):
+    user = m.from_user
+    coll_dict: dict = u.collection
+
+    if not coll_dict:
+        return await m.reply('Your collection is empty.')
+
+    duplicates = {}
+
+    # 🔥 SAME LOGIC AS /collection COMMAND
+    for k, v in coll_dict.items():
+        try:
+            count = int(v)  # handle "3" and 3 both
+        except:
+            continue
+
+        if count > 1:
+            duplicates[str(k)] = count
+
+    if not duplicates:
+        return await m.reply('No extras 🆔 found in your collection.')
+
+    msg = await m.reply("📄 Creating your extras list...")
+
+    url = await create_telegraph_for_duplicates(user, duplicates)
+
+    await msg.edit(
+        f"📄 **Here is your Extra Characters list:**\n\n"
+        f"🔗 {url}"
+    )
+
+
+# ======================================================
+#               /uncollected COMMAND
 # ======================================================
 
 @Client.on_message(filters.command('uncollected'))
