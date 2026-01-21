@@ -10,29 +10,36 @@ from . import YxH, get_anime_character
 from YxH.Database.characters import get_all as get_all_anime_characters
 
 
-# ------------------- Telegraph Cache -------------------
-telegraph_accounts = {}  # user.id -> Telegraph instance
+# ======================================================
+#                   TELEGRAPH SYSTEM
+# ======================================================
+
+telegraph_clients = {}  # user.id -> Telegraph instance
 
 
 async def get_telegraph_client(user):
-    if user.id in telegraph_accounts:
-        return telegraph_accounts[user.id]
+    if user.id in telegraph_clients:
+        return telegraph_clients[user.id]
 
     tg = Telegraph()
     await asyncio.to_thread(tg.create_account, short_name=user.first_name)
 
-    telegraph_accounts[user.id] = tg
+    telegraph_clients[user.id] = tg
     return tg
 
 
-# ------------------- Telegraph Page for Duplicates -------------------
-async def create_telegraph_for_duplicates(user, duplicates):
+# ======================================================
+#           CREATE TELEGRAPH PAGE FOR EXTRAS
+# ======================================================
+
+async def create_telegraph_for_duplicates(user, duplicates: dict):
     tg = await get_telegraph_client(user)
 
     content = []
 
-    for dup_id, count in duplicates.items():
-        char = await get_anime_character(str(dup_id))
+    # Sort by most duplicates first
+    for char_id, count in sorted(duplicates.items(), key=lambda x: x[1], reverse=True):
+        char = await get_anime_character(str(char_id))
         if not char:
             continue
 
@@ -57,7 +64,10 @@ async def create_telegraph_for_duplicates(user, duplicates):
     return "https://telegra.ph/" + page["path"]
 
 
-# ------------------- PDF Creation for Uncollected -------------------
+# ======================================================
+#            PDF FOR UNCOLLECTED CHARACTERS
+# ======================================================
+
 async def create_pdf_for_uncollected(user, uncollected, file_path):
     c = canvas.Canvas(file_path, pagesize=letter)
     width, height = letter
@@ -88,21 +98,43 @@ async def create_pdf_for_uncollected(user, uncollected, file_path):
     c.save()
 
 
-# ------------------- /extras Command (Telegraph) -------------------
+# ======================================================
+#                 /extras COMMAND
+# ======================================================
+
 @Client.on_message(filters.command("extras"))
 @YxH()
-async def find_duplicates(_, m, u):
+async def extras_command(_, m, u):
     user = m.from_user
     coll_dict: dict = u.collection or {}
 
     if not coll_dict:
         return await m.reply("Your collection is empty.")
 
-    # Find characters with more than 1 copy
-    duplicates = {
-        str(k): v for k, v in coll_dict.items()
-        if isinstance(v, int) and v > 1
-    }
+    duplicates = {}
+
+    for k, v in coll_dict.items():
+        count = 0
+
+        # Case 1: stored as integer count
+        if isinstance(v, int):
+            count = v
+
+        # Case 2: stored as list/tuple
+        elif isinstance(v, (list, tuple, set)):
+            count = len(v)
+
+        # Case 3: stored as dict
+        elif isinstance(v, dict):
+            if "count" in v:
+                count = int(v.get("count", 0))
+            elif "copies" in v:
+                count = int(v.get("copies", 0))
+            elif "amount" in v:
+                count = int(v.get("amount", 0))
+
+        if count > 1:
+            duplicates[str(k)] = count
 
     if not duplicates:
         return await m.reply("No extras 🆔 found in your collection.")
@@ -117,7 +149,10 @@ async def find_duplicates(_, m, u):
     )
 
 
-# ------------------- /uncollected Command (PDF) -------------------
+# ======================================================
+#               /uncollected COMMAND
+# ======================================================
+
 @Client.on_message(filters.command("uncollected"))
 @YxH()
 async def uncollected_characters(_, m, u):
