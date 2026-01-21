@@ -1,6 +1,7 @@
 import asyncio
 import os
 from pyrogram import Client, filters
+from pyrogram.types import InlineKeyboardMarkup as ikm, InlineKeyboardButton as ikb
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 
@@ -11,7 +12,7 @@ from YxH.Database.characters import get_all as get_all_anime_characters
 
 
 # ======================================================
-#                   TELEGRAPH SYSTEM
+#                  TELEGRAPH SYSTEM
 # ======================================================
 
 telegraph_clients = {}  # user.id -> Telegraph instance
@@ -29,7 +30,7 @@ async def get_telegraph_client(user):
 
 
 # ======================================================
-#           CREATE TELEGRAPH PAGE FOR EXTRAS
+#          CREATE TELEGRAPH PAGE FOR DUPLICATES
 # ======================================================
 
 async def create_telegraph_for_duplicates(user, duplicates: dict):
@@ -37,23 +38,16 @@ async def create_telegraph_for_duplicates(user, duplicates: dict):
 
     content = []
 
-    # Sort by most duplicates first
-    for char_id, count in sorted(duplicates.items(), key=lambda x: x[1], reverse=True):
-        char = await get_anime_character(str(char_id))
+    for dup_id, count in duplicates.items():
+        char = await get_anime_character(str(dup_id))
         if not char:
             continue
 
         text = f"• {char.name} (ID: {char.id}) × {count}"
-        content.append({
-            "tag": "p",
-            "children": [text]
-        })
+        content.append({"tag": "p", "children": [text]})
 
     if not content:
-        content.append({
-            "tag": "p",
-            "children": ["No duplicate characters found."]
-        })
+        content.append({"tag": "p", "children": ["No duplicate characters found."]})
 
     page = await asyncio.to_thread(
         tg.create_page,
@@ -65,7 +59,39 @@ async def create_telegraph_for_duplicates(user, duplicates: dict):
 
 
 # ======================================================
-#            PDF FOR UNCOLLECTED CHARACTERS
+#                 /extras COMMAND (TELEGRAPH)
+# ======================================================
+
+@Client.on_message(filters.command('extras'))
+@YxH()
+async def find_duplicates(_, m, u):
+    user = m.from_user
+    coll_dict: dict = u.collection
+
+    if not coll_dict:
+        return await m.reply('Your collection is empty.')
+
+    # ✅ EXACT SAME LOGIC AS YOUR WORKING SCRIPT
+    duplicates = {
+        k: v for k, v in coll_dict.items()
+        if isinstance(v, int) and v > 1
+    }
+
+    if not duplicates:
+        return await m.reply('No extras 🆔 found in your collection.')
+
+    msg = await m.reply("📄 Creating your extras list...")
+
+    url = await create_telegraph_for_duplicates(user, duplicates)
+
+    await msg.edit(
+        f"📄 **Here is your Extra Characters list:**\n\n"
+        f"🔗 {url}"
+    )
+
+
+# ======================================================
+#        PDF CREATION FOR UNCOLLECTED (UNCHANGED)
 # ======================================================
 
 async def create_pdf_for_uncollected(user, uncollected, file_path):
@@ -79,81 +105,27 @@ async def create_pdf_for_uncollected(user, uncollected, file_path):
 
     c.setFont("Helvetica", 12)
 
-    if not uncollected:
-        c.drawString(50, y, "🎉 You have collected all characters!")
-    else:
-        for char in uncollected:
-            if not char:
-                continue
+    for char in uncollected:
+        if not char:
+            continue
 
-            line = f"{char.name} (ID: {char.id})"
+        line = f"{char.name} (ID: {char.id})"
 
-            if y < 50:
-                c.showPage()
-                y = height - 50
+        if y < 50:
+            c.showPage()
+            y = height - 50
 
-            c.drawString(50, y, line)
-            y -= 20
+        c.drawString(50, y, line)
+        y -= 20
 
     c.save()
 
 
 # ======================================================
-#                 /extras COMMAND
+#                 /uncollected COMMAND
 # ======================================================
 
-@Client.on_message(filters.command("extras"))
-@YxH()
-async def extras_command(_, m, u):
-    user = m.from_user
-    coll_dict: dict = u.collection or {}
-
-    if not coll_dict:
-        return await m.reply("Your collection is empty.")
-
-    duplicates = {}
-
-    for k, v in coll_dict.items():
-        count = 0
-
-        # Case 1: stored as integer count
-        if isinstance(v, int):
-            count = v
-
-        # Case 2: stored as list/tuple
-        elif isinstance(v, (list, tuple, set)):
-            count = len(v)
-
-        # Case 3: stored as dict
-        elif isinstance(v, dict):
-            if "count" in v:
-                count = int(v.get("count", 0))
-            elif "copies" in v:
-                count = int(v.get("copies", 0))
-            elif "amount" in v:
-                count = int(v.get("amount", 0))
-
-        if count > 1:
-            duplicates[str(k)] = count
-
-    if not duplicates:
-        return await m.reply("No extras 🆔 found in your collection.")
-
-    msg = await m.reply("📄 Creating your extras list...")
-
-    url = await create_telegraph_for_duplicates(user, duplicates)
-
-    await msg.edit(
-        f"📄 **Your Extra Characters List is Ready!**\n\n"
-        f"🔗 {url}"
-    )
-
-
-# ======================================================
-#               /uncollected COMMAND
-# ======================================================
-
-@Client.on_message(filters.command("uncollected"))
+@Client.on_message(filters.command('uncollected'))
 @YxH()
 async def uncollected_characters(_, m, u):
     user = m.from_user
@@ -163,7 +135,6 @@ async def uncollected_characters(_, m, u):
     if not all_characters:
         return await m.reply("No characters exist in the database.")
 
-    # Fix ID type mismatch
     collected_ids = set(str(k) for k in coll_dict.keys())
 
     uncollected = [
