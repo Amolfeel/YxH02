@@ -10,27 +10,24 @@ from . import YxH, get_anime_character
 from YxH.Database.characters import get_all as get_all_anime_characters
 
 
-# ------------------- Telegraph Init -------------------
-telegraph = Telegraph()
-telegraph_accounts = {}  # user.id -> account
+# ------------------- Telegraph Cache -------------------
+telegraph_accounts = {}  # user.id -> Telegraph instance
 
 
-async def get_telegraph_account(user):
+async def get_telegraph_client(user):
     if user.id in telegraph_accounts:
         return telegraph_accounts[user.id]
 
-    account = await asyncio.to_thread(
-        telegraph.create_account,
-        short_name=user.first_name
-    )
-    telegraph_accounts[user.id] = account
-    return account
+    tg = Telegraph()
+    await asyncio.to_thread(tg.create_account, short_name=user.first_name)
+
+    telegraph_accounts[user.id] = tg
+    return tg
 
 
 # ------------------- Telegraph Page for Duplicates -------------------
 async def create_telegraph_for_duplicates(user, duplicates):
-    account = await get_telegraph_account(user)
-    telegraph.access_token = account["access_token"]
+    tg = await get_telegraph_client(user)
 
     content = []
 
@@ -52,7 +49,7 @@ async def create_telegraph_for_duplicates(user, duplicates):
         })
 
     page = await asyncio.to_thread(
-        telegraph.create_page,
+        tg.create_page,
         title=f"{user.first_name}'s Extra Characters",
         content=content
     )
