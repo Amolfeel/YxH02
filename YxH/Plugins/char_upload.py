@@ -1,6 +1,6 @@
 from pyrogram import Client, filters
 from . import YxH
-from ..Class.character import AnimeCharacter, YaoiYuriCharacter
+from ..Class.character import AnimeCharacter
 from config import ANIME_CHAR_CHANNEL_ID
 import asyncio
 
@@ -23,7 +23,6 @@ async def process_message(client: Client, m):
         rarity = spl[2].strip()
         char_id = int(spl[3].strip())
 
-        # Store Telegram reference instead of external URL
         image_ref = {
             "chat_id": m.chat.id,
             "message_id": m.id
@@ -37,7 +36,6 @@ async def process_message(client: Client, m):
             rarity
         )
 
-        # IMPORTANT: pass client so inline file_id can be generated
         await c.add(client)
 
         return "OK"
@@ -63,7 +61,6 @@ async def aupl(client: Client, m, u):
     else:
         return await m.reply("**Usage:** `/aupl start end` or `/aupl msg_id`")
 
-    # Split into batches of 200 (Telegram API limit)
     batches = []
     while end - st > 200:
         batches.append(list(range(st, st + 200)))
